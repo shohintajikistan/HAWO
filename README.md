@@ -1,2 +1,0 @@
-# HAWO
-HAWO by shohintajikistan
