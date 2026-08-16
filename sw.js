@@ -27,23 +27,50 @@ self.addEventListener("activate", event => {
 });
 
 self.addEventListener("fetch", event => {
-  if (event.request.method !== "GET") return;
 
+  const request = event.request;
+
+  /*
+   * API погоды всегда получаем свежим.
+   */
+  if (
+    request.url.includes("api.open-meteo.com") ||
+    request.url.includes("air-quality-api.open-meteo.com") ||
+    request.url.includes("geocoding-api.open-meteo.com") ||
+    request.url.includes("bigdatacloud.net")
+  ) {
+    event.respondWith(
+      fetch(request)
+        .catch(() => caches.match(request))
+    );
+
+    return;
+  }
+
+  /*
+   * Для файлов приложения:
+   * сначала сеть, затем кэш.
+   */
   event.respondWith(
-    fetch(event.request)
+    fetch(request)
       .then(response => {
 
-        const copy = response.clone();
+        if (
+          response &&
+          response.status === 200 &&
+          request.method === "GET"
+        ) {
+          const copy = response.clone();
 
-        caches.open(CACHE_NAME)
-          .then(cache => {
-            cache.put(event.request, copy);
-          });
+          caches.open(CACHE_NAME)
+            .then(cache => {
+              cache.put(request, copy);
+            });
+        }
 
         return response;
       })
-      .catch(() => {
-        return caches.match(event.request);
-      })
+      .catch(() => caches.match(request))
   );
+
 });
