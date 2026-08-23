@@ -20,7 +20,7 @@
 
 <link rel="manifest" href="manifest.json">
 
-<title>SHOHIN WEATHER 🇹🇯</title>
+<title>HAWO 🇹🇯</title>
 
 <style>
 
@@ -53,7 +53,7 @@ body{
 }
 
 .logo{
-    font-size:23px;
+    font-size:25px;
     font-weight:700;
 }
 
@@ -143,9 +143,7 @@ body{
 
 .metrics{
     display:grid;
-    grid-template-columns:
-    repeat(2,1fr);
-
+    grid-template-columns:repeat(2,1fr);
     gap:10px;
     margin-top:14px;
 }
@@ -309,7 +307,7 @@ body{
     <div class="header">
 
         <div class="logo">
-            SHOHIN <span>WEATHER</span>
+            HAWO <span>🇹🇯</span>
         </div>
 
         <button
@@ -328,7 +326,7 @@ body{
         <input
             id="cityInput"
             type="search"
-            placeholder="Город Таджикистана..."
+            placeholder="Город..."
             value="Dushanbe">
 
         <button
@@ -358,32 +356,34 @@ body{
 
 /*
 ====================================================
-SHOHIN WEATHER
+HAWO WEATHER
 ====================================================
 
-ВАЖНО:
+Источник:
 
-API KEY ЗДЕСЬ НЕТ.
-
-Позже приложение будет обращаться:
-
-SHOHIN
-   ↓
-Cloudflare Worker
-   ↓
+HAWO
+ ↓
+Google Apps Script
+ ↓
 WeatherAPI
+ ↓
+JSON
 
-Секретный ключ будет находиться
-только внутри Cloudflare Worker.
+API KEY находится на сервере,
+а не внутри этого HTML.
 ====================================================
 */
+
+
+const API_URL =
+"https://script.google.com/macros/s/AKfycby1mLbrD-7LSqAWEWrgXnPf9mAArxpwiR2Ic_TjGlXGDh2HS7w7ntlwIGkOYHPin6vc6w/exec";
 
 
 let currentCity = "Dushanbe";
 
 
 /* ==================================================
-   ЗАПРОС К НАШЕМУ CLOUDFLARE WORKER
+   ЗАГРУЗКА ПОГОДЫ
    ================================================== */
 
 async function loadWeather(city){
@@ -399,21 +399,8 @@ async function loadWeather(city){
 
     try{
 
-        /*
-        ПОКА WORKER НЕ СОЗДАН.
-
-        Позже здесь будет настоящий адрес:
-
-        https://weather-api.твой-worker.workers.dev
-
-        */
-
-        const WORKER_URL =
-            "https://YOUR-WORKER.workers.dev";
-
-
         const url =
-            WORKER_URL +
+            API_URL +
             "?q=" +
             encodeURIComponent(city);
 
@@ -425,7 +412,8 @@ async function loadWeather(city){
         if(!response.ok){
 
             throw new Error(
-                "Ошибка Weather Worker"
+                "HTTP ошибка: " +
+                response.status
             );
 
         }
@@ -435,8 +423,24 @@ async function loadWeather(city){
             await response.json();
 
 
+        if(!data.location ||
+           !data.current){
+
+            throw new Error(
+                "Неверный ответ API"
+            );
+
+        }
+
+
         currentCity =
             data.location.name;
+
+
+        document
+            .getElementById("cityInput")
+            .value =
+            currentCity;
 
 
         renderWeather(data);
@@ -445,22 +449,22 @@ async function loadWeather(city){
 
     catch(error){
 
+        console.error(error);
+
         box.innerHTML = `
 
             <div class="error">
 
-                ❌ Погода пока не подключена.
+                ❌ Не удалось получить погоду.
 
                 <br><br>
 
-                Следующий шаг —
-                создаём Cloudflare Worker.
+                Проверьте подключение
+                к интернету.
 
             </div>
 
         `;
-
-        console.error(error);
 
     }
 
@@ -468,7 +472,7 @@ async function loadWeather(city){
 
 
 /* ==================================================
-   ОТОБРАЖЕНИЕ
+   ОТОБРАЖЕНИЕ ПОГОДЫ
    ================================================== */
 
 function renderWeather(data){
@@ -480,7 +484,10 @@ function renderWeather(data){
         data.location;
 
     const forecast =
-        data.forecast.forecastday;
+        data.forecast &&
+        data.forecast.forecastday
+        ? data.forecast.forecastday
+        : [];
 
 
     let html = `
@@ -492,8 +499,12 @@ function renderWeather(data){
             </div>
 
             <div class="region">
-                ${location.region},
-                ${location.country}
+
+                ${location.region || ""}
+                ${location.country
+                    ? ", " + location.country
+                    : ""}
+
             </div>
 
             <img
@@ -579,151 +590,192 @@ function renderWeather(data){
 
         </div>
 
-
-        <div class="section">
-
-            <h2>
-                🕐 Почасовой прогноз
-            </h2>
-
-            <div class="hourly">
     `;
 
 
-    const hours =
-        forecast[0].hour;
+    /* ==================================================
+       ПОЧАСОВОЙ ПРОГНОЗ
+       ================================================== */
+
+    if(
+        forecast.length &&
+        forecast[0].hour
+    ){
+
+        html += `
+
+            <div class="section">
+
+                <h2>
+                    🕐 Почасовой прогноз
+                </h2>
+
+                <div class="hourly">
+
+        `;
 
 
-    hours.forEach(
-        (hour,index)=>{
-
-            if(index % 2 !== 0)
-                return;
+        const hours =
+            forecast[0].hour;
 
 
-            const time =
-                hour.time
-                .split(" ")[1];
+        hours.forEach(
+            (hour,index)=>{
+
+                if(index % 2 !== 0)
+                    return;
 
 
-            html += `
+                const time =
+                    hour.time
+                    .split(" ")[1];
 
-                <div class="hour">
 
-                    <div class="hour-time">
-                        ${time}
+                html += `
+
+                    <div class="hour">
+
+                        <div class="hour-time">
+                            ${time}
+                        </div>
+
+                        <img
+                            src="https:${hour.condition.icon}"
+                            alt="weather">
+
+                        <div class="hour-temp">
+
+                            ${Math.round(
+                                hour.temp_c
+                            )}°
+
+                        </div>
+
                     </div>
 
-                    <img
-                        src="https:${hour.condition.icon}">
+                `;
 
-                    <div class="hour-temp">
-                        ${Math.round(
-                            hour.temp_c
-                        )}°
-                    </div>
+            }
+        );
+
+
+        html += `
 
                 </div>
 
-            `;
-
-        }
-    );
-
-
-    html += `
-
             </div>
 
-        </div>
+        `;
+
+    }
 
 
-        <div class="section">
+    /* ==================================================
+       ПРОГНОЗ ПО ДНЯМ
+       ================================================== */
 
-            <h2>
-                📅 7 дней
-            </h2>
+    if(forecast.length){
 
-            <div class="days">
+        html += `
 
-    `;
+            <div class="section">
 
+                <h2>
+                    📅 Прогноз
+                </h2>
 
-    forecast.forEach(
-        (day,index)=>{
+                <div class="days">
 
-            const date =
-                new Date(day.date);
-
-
-            let name;
+        `;
 
 
-            if(index === 0){
+        forecast.forEach(
+            (day,index)=>{
 
-                name =
-                    "Сегодня";
-
-            }
-
-            else{
-
-                name =
-                    date.toLocaleDateString(
-                        "ru-RU",
-                        {
-                            weekday:"short"
-                        }
+                const date =
+                    new Date(
+                        day.date +
+                        "T12:00:00"
                     );
 
+
+                let name;
+
+
+                if(index === 0){
+
+                    name =
+                        "Сегодня";
+
+                }
+
+                else{
+
+                    name =
+                        date.toLocaleDateString(
+                            "ru-RU",
+                            {
+                                weekday:"short"
+                            }
+                        );
+
+                }
+
+
+                html += `
+
+                    <div class="day">
+
+                        <div class="day-name">
+                            ${name}
+                        </div>
+
+                        <img
+                            src="https:${day.day.condition.icon}"
+                            alt="weather">
+
+                        <div class="day-condition">
+
+                            ${day.day.condition.text}
+
+                        </div>
+
+                        <div class="day-temp">
+
+                            ${Math.round(
+                                day.day.maxtemp_c
+                            )}°
+
+                            /
+
+                            ${Math.round(
+                                day.day.mintemp_c
+                            )}°
+
+                        </div>
+
+                    </div>
+
+                `;
+
             }
+        );
 
 
-            html += `
-
-                <div class="day">
-
-                    <div class="day-name">
-                        ${name}
-                    </div>
-
-                    <img
-                        src="https:${day.day.condition.icon}">
-
-                    <div class="day-condition">
-                        ${day.day.condition.text}
-                    </div>
-
-                    <div class="day-temp">
-
-                        ${Math.round(
-                            day.day.maxtemp_c
-                        )}°
-
-                        /
-
-                        ${Math.round(
-                            day.day.mintemp_c
-                        )}°
-
-                    </div>
+        html += `
 
                 </div>
 
-            `;
-
-        }
-    );
-
-
-    html += `
-
             </div>
 
-        </div>
+        `;
 
-    `;
+    }
 
+
+    /* ==================================================
+       КАЧЕСТВО ВОЗДУХА
+       ================================================== */
 
     if(current.air_quality){
 
@@ -762,8 +814,7 @@ function renderWeather(data){
 
         <div class="source">
 
-            Weather data by
-            WeatherAPI.com
+            HAWO Weather 🇹🇯
 
         </div>
 
@@ -772,13 +823,14 @@ function renderWeather(data){
 
     document
         .getElementById("weather")
-        .innerHTML = html;
+        .innerHTML =
+        html;
 
 }
 
 
 /* ==================================================
-   ПОИСК
+   ПОИСК ГОРОДА
    ================================================== */
 
 function searchCity(){
@@ -839,7 +891,9 @@ function getGPS(){
         },
 
 
-        function(){
+        function(error){
+
+            console.error(error);
 
             alert(
                 "Разрешите доступ к GPS"
@@ -884,7 +938,7 @@ document
 
 
 /* ==================================================
-   START
+   ЗАПУСК
    ================================================== */
 
 loadWeather("Dushanbe");
