@@ -1,4 +1,4 @@
-const CACHE_NAME = "shohin-hawo-ai-v3";
+const CACHE_NAME = "shohin-hawo-ai-v4";
 
 const APP_FILES = [
     "./",
@@ -84,7 +84,10 @@ self.addEventListener("fetch", event => {
 
     if (
         request.url.includes("workers.dev") ||
-        request.url.includes("weatherapi.com")
+        request.url.includes("weatherapi.com") ||
+        request.url.includes("huggingface.co") ||
+        request.url.includes("hf.co") ||
+        request.url.includes("xethub.hf.co")
     ) {
 
         return;
