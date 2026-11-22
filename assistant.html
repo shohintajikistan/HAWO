@@ -185,10 +185,6 @@ if(onlineEndpoint){checkOnlineServer();}
 async function sendToAI(raw){
  const text=raw.trim();if(!text||busy)return;
  addAIMessage(text,"user");el("message").value="";
- if(!shohinGenerator){
-   addAIMessage(activeLang==="tg"?"Аввал тугмаи «Загрузить SHOHIN AI»-ро пахш кун. Барои боргирии аввал интернет лозим аст.":activeLang==="en"?"Load SHOHIN AI first. Internet is needed for the initial model download.":activeLang==="zh"?"请先加载 SHOHIN AI。首次下载模型需要网络。":"Сначала нажми «Загрузить SHOHIN AI». Для первой загрузки модели нужен интернет.");
-   return;
- }
  setBusy(true);
  history.push({role:"user",content:text});
  if(history.length>10)history=history.slice(-10);
@@ -232,7 +228,7 @@ async function sendToAI(raw){
  }catch(err){
    console.error("SHOHIN AI inference error",err);
    history.pop();
-   addAIMessage("Ошибка запуска локальной модели: "+(err?.message||String(err)).slice(0,220)+". Попробуй перезагрузить страницу или очистить историю диалога.");
+   addAIMessage("Ошибка SHOHIN AI: "+(err?.message||String(err)).slice(0,220)+". Проверь подключение к серверу или попробуй локальную модель.");
    setProgress("Ошибка SHOHIN AI. Проверь сервер или локальную модель.");
  }finally{setBusy(false);}
 }
@@ -260,7 +256,7 @@ el("quick").addEventListener("click",e=>{
  else sendToAI(b.textContent);
 },true);
 activeLang=el("lang").value;
-setProgress("Модель ещё не загружена. Нажми «Загрузить SHOHIN AI», чтобы скачать её один раз. После кэширования можно работать офлайн.");
+if(!onlineEndpoint)setProgress("Онлайн-сервер не настроен. Можно загрузить локальную модель для работы на устройстве.");
 </script>
 </body>
 </html>
