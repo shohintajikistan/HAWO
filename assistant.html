@@ -112,16 +112,24 @@ async function loadLocalModel(){
  try{
    if(navigator.storage?.persist) { try { await navigator.storage.persist(); } catch(_){} }
    const hasGPU=!!navigator.gpu;
-   const options=hasGPU?{device:"webgpu",dtype:"q4f16"}:{device:"wasm",dtype:"q4"};
-   setProgress(hasGPU?"Обнаружен WebGPU. Загружаем компактную модель Qwen3…":"WebGPU не обнаружен. Используем CPU/WASM; загрузка и ответы могут быть медленнее.");
-   shohinGenerator=await pipeline("text-generation",MODEL_ID,{
-     ...options,
-     progress_callback:(p)=>{
-       if(p && typeof p.progress==="number"){
-         setProgress("Загрузка модели: "+Math.round(p.progress)+"% · "+(p.file||p.name||"файл"));
-       } else if(p?.status==="ready") setProgress("Модель загружена. Инициализация…");
+   const onProgress=(p)=>{
+     if(p && typeof p.progress==="number"){
+       setProgress("Загрузка модели: "+Math.round(p.progress)+"% · "+(p.file||p.name||"файл"));
+     } else if(p?.status==="ready") setProgress("Модель загружена. Инициализация…");
+   };
+   if(hasGPU){
+     setProgress("Обнаружен WebGPU. Загружаем Qwen3 в экономном режиме q4f16…");
+     try{
+       shohinGenerator=await pipeline("text-generation",MODEL_ID,{device:"webgpu",dtype:"q4f16",progress_callback:onProgress});
+     }catch(gpuError){
+       console.warn("WebGPU unavailable for this device; falling back to CPU/WASM",gpuError);
+       setProgress("WebGPU не запустился. Переключаемся на CPU/WASM; потребуется загрузить более крупный файл (около 920 МБ).");
+       shohinGenerator=await pipeline("text-generation",MODEL_ID,{device:"wasm",dtype:"q4",progress_callback:onProgress});
      }
-   });
+   }else{
+     setProgress("WebGPU не обнаружен. Используем CPU/WASM; модель больше и ответы будут медленнее.");
+     shohinGenerator=await pipeline("text-generation",MODEL_ID,{device:"wasm",dtype:"q4",progress_callback:onProgress});
+   }
    setProgress("SHOHIN AI готов. Модель работает локально на устройстве.");
    el("loadModel").textContent="ИИ загружен ✓";
    addAIMessage(activeLang==="tg"?"Модели SHOHIN AI омода аст. Акнун метавонем суҳбат кунем.":activeLang==="en"?"SHOHIN AI is ready. We can chat now.":activeLang==="zh"?"SHOHIN AI 已准备就绪。现在可以开始聊天。":"Модель SHOHIN AI готова. Теперь можно общаться.");
