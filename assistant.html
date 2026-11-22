@@ -40,6 +40,17 @@
  </div>
  <div id="modelProgress" class="status" aria-live="polite">Модель ещё не загружена. Можно пользоваться прежними локальными подсказками.</div>
 </section>
+
+<section class="hero" style="padding:13px;margin-top:12px">
+ <div style="font-weight:800;margin-bottom:6px">Онлайн-ядро SHOHIN AI</div>
+ <p style="margin-bottom:10px">Подключается к собственному серверу SHOHIN. Если сервер ещё не развёрнут, можно продолжать использовать локальную модель.</p>
+ <div style="display:flex;gap:8px;flex-wrap:wrap">
+  <input id="serverUrl" inputmode="url" autocomplete="url" placeholder="https://ваш-сервер-shohin" style="flex:1;min-width:180px;border:1px solid var(--line);border-radius:12px;background:#061a12;color:white;padding:12px">
+  <button class="tab" id="connectServer">Проверить сервер</button>
+ </div>
+ <div id="serverStatus" class="status">Сервер не настроен. URL появится после размещения backend.</div>
+</section>
+
 <section class="chat" id="chat" aria-live="polite"></section>
 <div class="quick" id="quick"></div>
 <div class="composer"><button class="mic" id="mic" title="Голосовой ввод">🎙</button><input id="message" autocomplete="off" placeholder="Напиши сообщение…"><button class="send" id="send">➤</button></div>
@@ -66,6 +77,7 @@ $("send").onclick=send;$("message").addEventListener("keydown",e=>{if(e.key==="E
 $("mic").onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$("status").textContent="Speech recognition is not supported in this browser. Type your answer instead.";return}const r=new SR();r.lang={ru:"ru-RU",tg:"tg-TJ",en:"en-US",zh:"zh-CN"}[lang()];r.onresult=e=>{$("message").value=e.results[0][0].transcript};r.onerror=()=>{$("status").textContent="Microphone recognition failed. You can type instead."};r.start()};
 render();
 </script>
+<script src="ai-core/client.js"></script>
 <script type="module">
 import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
 env.useBrowserCache = true;
@@ -81,6 +93,11 @@ let activeMode = "help";
 let activeLang = "ru";
 let history = [];
 let currentScenario = "";
+let onlineEndpoint = localStorage.getItem("shohinAiEndpoint") || "";
+const serverInput = el("serverUrl");
+const serverStatus = el("serverStatus");
+if (serverInput) serverInput.value = onlineEndpoint;
+if (onlineEndpoint) window.SHOHIN_AI_ENDPOINT = onlineEndpoint;
 
 const languageNames = {ru:"Russian",tg:"Tajik",en:"English",zh:"Simplified Chinese"};
 const scenarioNames = {
@@ -143,6 +160,28 @@ async function loadLocalModel(){
    return false;
  }finally{loadingModel=false;el("loadModel").disabled=false;}
 }
+async function checkOnlineServer(){
+ const endpoint=(serverInput.value||"").trim().replace(/\\/+$/,"");
+ if(!endpoint){serverStatus.textContent="Введи HTTPS-адрес сервера SHOHIN AI.";return false;}
+ serverStatus.textContent="Проверяем соединение…";
+ try{
+   const response=await fetch(endpoint+"/health",{method:"GET"});
+   if(!response.ok)throw new Error("HTTP "+response.status);
+   const data=await response.json();
+   if(!data.ok)throw new Error("Модель на сервере не готова");
+   onlineEndpoint=endpoint;
+   window.SHOHIN_AI_ENDPOINT=endpoint;
+   localStorage.setItem("shohinAiEndpoint",endpoint);
+   serverStatus.textContent="Сервер SHOHIN AI доступен. Онлайн-ответы включены.";
+   setProgress("Онлайн-ядро подключено · профиль HAWO · без платного API стороннего ИИ.");
+   return true;
+ }catch(error){
+   serverStatus.textContent="Не удалось подключиться: "+(error.message||String(error))+". Проверь URL, HTTPS и состояние сервера.";
+   return false;
+ }
+}
+if($("connectServer"))$("connectServer").addEventListener("click",checkOnlineServer);
+if(onlineEndpoint){checkOnlineServer();}
 async function sendToAI(raw){
  const text=raw.trim();if(!text||busy)return;
  addAIMessage(text,"user");el("message").value="";
@@ -150,11 +189,33 @@ async function sendToAI(raw){
    addAIMessage(activeLang==="tg"?"Аввал тугмаи «Загрузить SHOHIN AI»-ро пахш кун. Барои боргирии аввал интернет лозим аст.":activeLang==="en"?"Load SHOHIN AI first. Internet is needed for the initial model download.":activeLang==="zh"?"请先加载 SHOHIN AI。首次下载模型需要网络。":"Сначала нажми «Загрузить SHOHIN AI». Для первой загрузки модели нужен интернет.");
    return;
  }
- setBusy(true);setProgress("SHOHIN AI формирует ответ на устройстве…");
+ setBusy(true);
  history.push({role:"user",content:text});
  if(history.length>10)history=history.slice(-10);
- const messages=[{role:"system",content:systemFor()},...history];
  try{
+   if(onlineEndpoint && window.SHOHIN_AI){
+     setProgress("SHOHIN AI формирует онлайн-ответ на собственном сервере…");
+     const result=await window.SHOHIN_AI.chat({
+       profile:"weather",
+       language:activeLang,
+       context:"The user is inside HAWO, the SHOHIN WEATHER application. It has city search, current weather, hourly/daily forecasts, GPS location access and an image-generator page. Never invent current weather data; no live weather payload is attached.",
+       messages:history
+     });
+     const answer=result.answer;
+     history.push({role:"assistant",content:answer});
+     if(history.length>10)history=history.slice(-10);
+     addAIMessage(answer);
+     setProgress("Готов · онлайн-ответ создан сервером SHOHIN AI.");
+     return;
+   }
+   if(!shohinGenerator){
+     history.pop();
+     addAIMessage("Онлайн-сервер ещё не подключён. Введи адрес сервера после его развёртывания или загрузи локальную модель.");
+     setProgress("Нет соединения с онлайн-сервером. Можно загрузить локальную модель.");
+     return;
+   }
+   setProgress("SHOHIN AI формирует ответ на устройстве…");
+   const messages=[{role:"system",content:systemFor()},...history];
    const result=await shohinGenerator(messages,{
      max_new_tokens:activeMode==="talk"?150:190,
      do_sample:true,temperature:0.65,top_p:0.85,repetition_penalty:1.12
@@ -167,12 +228,12 @@ async function sendToAI(raw){
    history.push({role:"assistant",content:answer});
    if(history.length>10)history=history.slice(-10);
    addAIMessage(answer);
-   setProgress("Готов · ответ создан локально · без отправки переписки на сервер.");
+   setProgress("Готов · ответ создан локально · переписка не отправлялась на сервер.");
  }catch(err){
    console.error("SHOHIN AI inference error",err);
    history.pop();
    addAIMessage("Ошибка запуска локальной модели: "+(err?.message||String(err)).slice(0,220)+". Попробуй перезагрузить страницу или очистить историю диалога.");
-   setProgress("Ошибка вычисления на устройстве.");
+   setProgress("Ошибка SHOHIN AI. Проверь сервер или локальную модель.");
  }finally{setBusy(false);}
 }
 function beginMode(mode){
