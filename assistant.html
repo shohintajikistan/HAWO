@@ -32,13 +32,13 @@
 <button class="tab" data-mode="talk" id="talkTab">Тренировка диалога</button>
 </div>
 <section class="hero" style="padding:13px;margin-top:12px">
- <div style="font-weight:800;margin-bottom:6px">Локальное интеллектуальное ядро</div>
- <p id="modelInfo" style="margin-bottom:10px">Модель Qwen3 0.6B запускается на устройстве. Первая загрузка требует интернет и около 570–920 МБ свободного места; затем файлы сохраняются в кэше браузера.</p>
+ <div style="font-weight:800;margin-bottom:6px">Резервная локальная модель</div>
+ <p id="modelInfo" style="margin-bottom:10px">Если онлайн-сервер SHOHIN AI недоступен, можно запустить Qwen3 0.6B прямо на устройстве. Первая загрузка требует интернет и около 570–920 МБ свободного места.</p>
  <div style="display:flex;gap:8px;flex-wrap:wrap">
-  <button class="tab active" id="loadModel" style="flex:1">Загрузить SHOHIN AI</button>
+  <button class="tab active" id="loadModel" style="flex:1">Загрузить локальную модель</button>
   <button class="tab" id="clearChat">Новый диалог</button>
  </div>
- <div id="modelProgress" class="status" aria-live="polite">Модель ещё не загружена. Можно пользоваться прежними локальными подсказками.</div>
+ <div id="modelProgress" class="status" aria-live="polite">Локальная модель используется как резерв, если онлайн-сервер не настроен.</div>
 </section>
 
 <section class="hero" style="padding:13px;margin-top:12px">
