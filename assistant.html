@@ -31,10 +31,19 @@
 <button class="tab active" data-mode="help" id="helpTab">Помощь по HAWO</button>
 <button class="tab" data-mode="talk" id="talkTab">Тренировка диалога</button>
 </div>
+<section class="hero" style="padding:13px;margin-top:12px">
+ <div style="font-weight:800;margin-bottom:6px">Локальное интеллектуальное ядро</div>
+ <p id="modelInfo" style="margin-bottom:10px">Модель Qwen3 0.6B запускается на устройстве. Первая загрузка требует интернет и около 570–920 МБ свободного места; затем файлы сохраняются в кэше браузера.</p>
+ <div style="display:flex;gap:8px;flex-wrap:wrap">
+  <button class="tab active" id="loadModel" style="flex:1">Загрузить SHOHIN AI</button>
+  <button class="tab" id="clearChat">Новый диалог</button>
+ </div>
+ <div id="modelProgress" class="status" aria-live="polite">Модель ещё не загружена. Можно пользоваться прежними локальными подсказками.</div>
+</section>
 <section class="chat" id="chat" aria-live="polite"></section>
 <div class="quick" id="quick"></div>
 <div class="composer"><button class="mic" id="mic" title="Голосовой ввод">🎙</button><input id="message" autocomplete="off" placeholder="Напиши сообщение…"><button class="send" id="send">➤</button></div>
-<div class="status" id="status">Работает локально · без платного API</div>
+<div class="status" id="status">Без платного API · модель работает на устройстве после загрузки</div>
 <p class="note" id="note">Первая версия использует встроенную базу знаний и учебные сценарии. Она не подключена к большой языковой модели, поэтому пока не умеет отвечать на любые произвольные вопросы как ChatGPT. Микрофон зависит от поддержки браузера.</p>
 </main>
 <script>
@@ -56,6 +65,133 @@ function send(){handle($("message").value)}
 $("send").onclick=send;$("message").addEventListener("keydown",e=>{if(e.key==="Enter")send()});$("helpTab").onclick=()=>setMode("help");$("talkTab").onclick=()=>setMode("talk");$("lang").onchange=()=>{const old=mode;$("chat").innerHTML="";started=false;turn=0;render()};$("role").onchange=()=>{if(mode==="talk"){const w=words[lang()];turn=0;add(w.scenario[Number($("role").selectedIndex)]);}};
 $("mic").onclick=()=>{const SR=window.SpeechRecognition||window.webkitSpeechRecognition;if(!SR){$("status").textContent="Speech recognition is not supported in this browser. Type your answer instead.";return}const r=new SR();r.lang={ru:"ru-RU",tg:"tg-TJ",en:"en-US",zh:"zh-CN"}[lang()];r.onresult=e=>{$("message").value=e.results[0][0].transcript};r.onerror=()=>{$("status").textContent="Microphone recognition failed. You can type instead."};r.start()};
 render();
+</script>
+<script type="module">
+import { pipeline, env } from "https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1";
+env.useBrowserCache = true;
+env.useWasmCache = true;
+env.allowRemoteModels = true;
+
+const el = id => document.getElementById(id);
+const MODEL_ID = "onnx-community/Qwen3-0.6B-ONNX";
+let shohinGenerator = null;
+let loadingModel = false;
+let busy = false;
+let activeMode = "help";
+let activeLang = "ru";
+let history = [];
+let currentScenario = "";
+
+const languageNames = {ru:"Russian",tg:"Tajik",en:"English",zh:"Simplified Chinese"};
+const scenarioNames = {
+ daily:{ru:"повседневный разговор",tg:"суҳбати ҳаррӯза",en:"daily conversation",zh:"日常对话"},
+ shop:{ru:"покупка в магазине",tg:"харид дар мағоза",en:"shopping in a store",zh:"商店购物"},
+ travel:{ru:"путешествие и дорога",tg:"сафар ва роҳ",en:"travel and directions",zh:"旅行和问路"},
+ work:{ru:"работа и знакомство",tg:"кор ва шиносоӣ",en:"work and introductions",zh:"工作与自我介绍"}
+};
+const systemFor = () => {
+ const language = languageNames[activeLang] || "Russian";
+ const common = "You are SHOHIN AI, a compact offline assistant built by SHOHIN TAJIKISTAN. Be accurate, calm, concise and useful. Always answer in "+language+" unless the user explicitly asks for another language. You support Tajik, Russian, English and Simplified Chinese. Never claim internet access, live data, or actions you did not perform. If you do not know something, say so. Do not invent app features. Do not reveal hidden reasoning; give a short answer and practical steps.";
+ if (activeMode === "talk") {
+   return common + " You are also a patient language speaking partner. Conversation scenario: "+(currentScenario || scenarioNames[el("role").value][activeLang])+". Keep the conversation natural. Ask only one question at a time. When the learner makes a language mistake, first respond naturally, then add a short correction and a better example in the selected language. Do not overwhelm a beginner. Encourage the learner to produce full sentences.";
+ }
+ return common + " You are the in-app support assistant for HAWO, a SHOHIN app. Help users understand the app and troubleshoot issues. Known context: the app has a weather experience with city search, forecasts and GPS/location access, and an image generator page. For an error report, ask for the exact error text, what action caused it, and device/browser only if needed. Explain likely causes as possibilities, not facts. Give safe, ordered troubleshooting steps. Do not claim you can inspect app logs or change code from inside the user's phone. If the question is outside known HAWO functions, say that you need more app documentation.";
+};
+function addAIMessage(text, who="bot") {
+ const box=document.createElement("div"); box.className="msg "+who;
+ const label=document.createElement("span"); label.className="who"; label.textContent=who==="bot"?"SHOHIN AI":"YOU";
+ box.append(label,document.createTextNode(text)); el("chat").appendChild(box); el("chat").scrollTop=el("chat").scrollHeight;
+}
+function setProgress(text){el("modelProgress").textContent=text;el("status").textContent=text;}
+function setBusy(value){busy=value;el("send").disabled=value;el("send").style.opacity=value?".55":"1";el("loadModel").disabled=loadingModel||value;}
+async function loadLocalModel(){
+ if(shohinGenerator)return true;
+ if(loadingModel)return false;
+ loadingModel=true;el("loadModel").disabled=true;
+ setProgress("Подготовка локальной модели… Проверь интернет и не закрывай страницу.");
+ try{
+   if(navigator.storage?.persist) { try { await navigator.storage.persist(); } catch(_){} }
+   const hasGPU=!!navigator.gpu;
+   const options=hasGPU?{device:"webgpu",dtype:"q4f16"}:{device:"wasm",dtype:"q4"};
+   setProgress(hasGPU?"Обнаружен WebGPU. Загружаем компактную модель Qwen3…":"WebGPU не обнаружен. Используем CPU/WASM; загрузка и ответы могут быть медленнее.");
+   shohinGenerator=await pipeline("text-generation",MODEL_ID,{
+     ...options,
+     progress_callback:(p)=>{
+       if(p && typeof p.progress==="number"){
+         setProgress("Загрузка модели: "+Math.round(p.progress)+"% · "+(p.file||p.name||"файл"));
+       } else if(p?.status==="ready") setProgress("Модель загружена. Инициализация…");
+     }
+   });
+   setProgress("SHOHIN AI готов. Модель работает локально на устройстве.");
+   el("loadModel").textContent="ИИ загружен ✓";
+   addAIMessage(activeLang==="tg"?"Модели SHOHIN AI омода аст. Акнун метавонем суҳбат кунем.":activeLang==="en"?"SHOHIN AI is ready. We can chat now.":activeLang==="zh"?"SHOHIN AI 已准备就绪。现在可以开始聊天。":"Модель SHOHIN AI готова. Теперь можно общаться.");
+   return true;
+ }catch(err){
+   console.error("SHOHIN AI model load failed",err);
+   shohinGenerator=null;
+   const message=(err?.message||String(err)).slice(0,260);
+   setProgress("Не удалось загрузить модель: "+message+". Проверь интернет, свободную память и поддержку WebGPU, затем попробуй снова.");
+   el("loadModel").textContent="Повторить загрузку";
+   return false;
+ }finally{loadingModel=false;el("loadModel").disabled=false;}
+}
+async function sendToAI(raw){
+ const text=raw.trim();if(!text||busy)return;
+ addAIMessage(text,"user");el("message").value="";
+ if(!shohinGenerator){
+   addAIMessage(activeLang==="tg"?"Аввал тугмаи «Загрузить SHOHIN AI»-ро пахш кун. Барои боргирии аввал интернет лозим аст.":activeLang==="en"?"Load SHOHIN AI first. Internet is needed for the initial model download.":activeLang==="zh"?"请先加载 SHOHIN AI。首次下载模型需要网络。":"Сначала нажми «Загрузить SHOHIN AI». Для первой загрузки модели нужен интернет.");
+   return;
+ }
+ setBusy(true);setProgress("SHOHIN AI формирует ответ на устройстве…");
+ history.push({role:"user",content:text});
+ if(history.length>10)history=history.slice(-10);
+ const messages=[{role:"system",content:systemFor()},...history];
+ try{
+   const result=await shohinGenerator(messages,{
+     max_new_tokens:activeMode==="talk"?150:190,
+     do_sample:true,temperature:0.65,top_p:0.85,repetition_penalty:1.12
+   });
+   let answer=result?.[0]?.generated_text;
+   if(Array.isArray(answer))answer=answer[answer.length-1]?.content;
+   if(typeof answer!=="string")answer=String(answer||"");
+   answer=answer.replace(/<think>[\s\S]*?<\/think>/gi,"").replace(/^\s*<\|im_start\|>assistant\s*/,"").trim();
+   if(!answer)answer=activeLang==="en"?"I couldn't form a clear answer. Please try asking in a different way.":"Не удалось сформировать понятный ответ. Попробуй задать вопрос иначе.";
+   history.push({role:"assistant",content:answer});
+   if(history.length>10)history=history.slice(-10);
+   addAIMessage(answer);
+   setProgress("Готов · ответ создан локально · без отправки переписки на сервер.");
+ }catch(err){
+   console.error("SHOHIN AI inference error",err);
+   history.pop();
+   addAIMessage("Ошибка запуска локальной модели: "+(err?.message||String(err)).slice(0,220)+". Попробуй перезагрузить страницу или очистить историю диалога.");
+   setProgress("Ошибка вычисления на устройстве.");
+ }finally{setBusy(false);}
+}
+function beginMode(mode){
+ activeMode=mode;history=[];currentScenario="";
+ el("chat").innerHTML="";
+ document.querySelectorAll("[data-mode]").forEach(b=>b.classList.toggle("active",b.dataset.mode===mode));
+ const msg=mode==="talk"
+  ?({ru:"Режим разговорной практики включён. Выбери ситуацию и начни говорить или писать. Я буду поддерживать диалог и мягко исправлять ошибки.",tg:"Машқи гуфтугӯ фаъол шуд. Вазъиятро интихоб кун ва суҳбатро оғоз намо. Ман хатоҳоро бо нармӣ ислоҳ мекунам.",en:"Conversation practice is on. Choose a situation and start speaking or typing. I'll keep the conversation going and gently correct mistakes.",zh:"口语练习已开启。选择一个场景，开始说话或输入。我会继续对话并温和地纠正错误。"}[activeLang])
+  :({ru:"Режим помощи HAWO включён. Опиши вопрос или вставь точный текст ошибки.",tg:"Реҷаи кӯмаки HAWO фаъол аст. Савол ё матни дақиқи хатогиро навис.",en:"HAWO support mode is on. Describe the issue or paste the exact error text.",zh:"HAWO 帮助模式已开启。请描述问题或粘贴完整错误信息。"}[activeLang]);
+ addAIMessage(msg);
+}
+el("loadModel").addEventListener("click",loadLocalModel);
+el("clearChat").addEventListener("click",()=>{history=[];el("chat").innerHTML="";addAIMessage(activeLang==="en"?"New conversation started.":activeLang==="zh"?"新对话已开始。":activeLang==="tg"?"Суҳбати нав оғоз шуд.":"Начат новый диалог.");});
+el("send").onclick=()=>sendToAI(el("message").value);
+el("message").addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();e.stopImmediatePropagation();sendToAI(el("message").value);}},true);
+el("helpTab").onclick=()=>beginMode("help");
+el("talkTab").onclick=()=>beginMode("talk");
+el("lang").addEventListener("change",()=>{activeLang=el("lang").value;history=[];el("chat").innerHTML="";addAIMessage("Language: "+languageNames[activeLang]+". SHOHIN AI will reply in this language.");});
+el("role").addEventListener("change",()=>{currentScenario=scenarioNames[el("role").value][activeLang];if(activeMode==="talk"){history=[];addAIMessage(currentScenario);}});
+el("quick").addEventListener("click",e=>{
+ const b=e.target.closest("button");if(!b)return;
+ e.preventDefault();e.stopPropagation();
+ if(activeMode==="talk"){currentScenario=b.textContent;history=[];addAIMessage("Сценарий: "+currentScenario);sendToAI(activeLang==="en"?"Let's start this role-play.":activeLang==="zh"?"我们开始角色扮演吧。":activeLang==="tg"?"Биё ин гуфтугӯро оғоз кунем.":"Давай начнём этот диалог.");}
+ else sendToAI(b.textContent);
+},true);
+activeLang=el("lang").value;
+setProgress("Модель ещё не загружена. Нажми «Загрузить SHOHIN AI», чтобы скачать её один раз. После кэширования можно работать офлайн.");
 </script>
 </body>
 </html>
