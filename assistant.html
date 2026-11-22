@@ -161,7 +161,7 @@ async function loadLocalModel(){
  }finally{loadingModel=false;el("loadModel").disabled=false;}
 }
 async function checkOnlineServer(){
- const endpoint=(serverInput.value||"").trim().replace(/\\/+$/,"");
+ const endpoint=(serverInput.value||"").trim().replace(/\/+$/, "");
  if(!endpoint){serverStatus.textContent="Введи HTTPS-адрес сервера SHOHIN AI.";return false;}
  serverStatus.textContent="Проверяем соединение…";
  try{
