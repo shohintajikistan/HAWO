@@ -1,8 +1,9 @@
-const CACHE_NAME = "shohin-weather-v1";
+const CACHE_NAME = "shohin-hawo-ai-v2";
 
 const APP_FILES = [
     "./",
     "./index.html",
+    "./image-generator.html",
     "./manifest.json",
     "./icon-192.png",
     "./icon-512.png"
