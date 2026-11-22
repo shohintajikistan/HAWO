@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#071c16">
+<link rel="manifest" href="manifest.json">
+<title>SHOHIN AI — Image Generator</title>
+<style>
+:root{color-scheme:dark;--bg:#071c16;--panel:#0d3024;--panel2:#123b2b;--green:#08a56c;--lime:#baf05b;--muted:#9bb8aa;--line:rgba(186,240,91,.16)}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at top,#123b2b 0,#071c16 55%);color:#f4fff8;font-family:Inter,Arial,sans-serif;min-height:100vh}
+.wrap{width:min(100%,720px);margin:auto;padding:18px 16px 40px}.top{display:flex;align-items:center;gap:12px;margin:4px 0 22px}
+.back{width:42px;height:42px;display:grid;place-items:center;border:1px solid var(--line);border-radius:14px;color:white;text-decoration:none;background:#0d3024;font-size:21px}
+.brand{font-weight:800;letter-spacing:.6px}.brand span{color:var(--lime)}.sub{font-size:12px;color:var(--muted);margin-top:3px}
+.hero{padding:22px;border:1px solid var(--line);border-radius:24px;background:linear-gradient(145deg,rgba(18,70,48,.95),rgba(9,37,26,.95));margin-bottom:16px}
+.kicker{font-size:11px;letter-spacing:1.6px;color:var(--lime);font-weight:800}.hero h1{font-size:27px;line-height:1.12;margin:9px 0}.hero p{color:#bad2c5;font-size:14px;line-height:1.5;margin:0}
+.panel{padding:17px;border:1px solid var(--line);border-radius:22px;background:rgba(10,39,27,.92);margin-bottom:14px}
+label{display:block;font-size:13px;font-weight:700;margin:0 0 9px}
+textarea,input,select{width:100%;border:1px solid rgba(186,240,91,.18);border-radius:14px;background:#061a12;color:#fff;padding:14px;font:inherit;outline:none}
+textarea{min-height:118px;resize:vertical;line-height:1.5}textarea:focus,input:focus,select:focus{border-color:var(--lime)}
+.hint{font-size:11px;color:var(--muted);line-height:1.5;margin-top:8px}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}.chip{border:1px solid var(--line);border-radius:30px;background:#103625;color:#cfe6d8;padding:8px 11px;font-size:12px}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-top:15px}
+.primary{width:100%;border:0;border-radius:15px;background:linear-gradient(100deg,#08a56c,#baf05b);color:#071c16;font-weight:900;font-size:15px;padding:16px;margin-top:15px}
+.primary:disabled{opacity:.55}.status{font-size:13px;color:#c5dfd1;min-height:20px;margin-top:12px}
+.preview{display:none;margin-top:14px}.preview img{display:block;width:100%;border-radius:16px;border:1px solid var(--line);background:#061a12}
+.actions{display:flex;gap:10px;margin-top:10px}.actions a,.actions button{flex:1;text-align:center;text-decoration:none;border:1px solid var(--line);border-radius:13px;padding:12px;color:#fff;background:#103625;font-size:13px}
+.api details summary{font-size:13px;color:#baf05b;cursor:pointer;font-weight:700}.api input{margin-top:12px}
+.foot{text-align:center;color:#698d7b;font-size:11px;margin-top:22px}
+@media(max-width:380px){.hero h1{font-size:23px}.controls{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main class="wrap">
+<header class="top"><a class="back" href="index.html" aria-label="Назад">‹</a><div><div class="brand">SHOHIN <span>AI</span></div><div class="sub">by SHOHIN TAJIKISTAN</div></div></header>
+<section class="hero"><div class="kicker">IMAGE STUDIO</div><h1>Преврати идею в изображение</h1><p>Опиши картинку, которую хочешь получить. SHOHIN AI отправит запрос модели генерации и покажет готовый результат.</p></section>
+<section class="panel">
+<label for="prompt">Что нужно создать?</label>
+<textarea id="prompt" maxlength="1200" placeholder="Например: реалистичный белый спортивный автомобиль на горной дороге в Памире, золотой закат, кинематографичный свет, высокая детализация..."></textarea>
+<div class="chips">
+<button class="chip" data-prompt="Photorealistic landscape of the Pamir mountains in Tajikistan at golden hour, dramatic clouds, natural colors, ultra detailed">Памир</button>
+<button class="chip" data-prompt="A futuristic emerald green supercar in a modern city at night, cinematic photography, realistic reflections">Автомобиль</button>
+<button class="chip" data-prompt="Premium minimal luxury product advertisement, emerald green and gold composition, studio lighting">Реклама</button>
+<button class="chip" data-prompt="A magical fantasy castle above the clouds, sunrise, highly detailed 3D concept art">Фэнтези</button>
+</div>
+<div class="controls">
+<div><label for="ratio">Формат</label><select id="ratio"><option value="square">Квадрат 1:1</option><option value="landscape">Горизонтальный 16:9</option><option value="portrait">Вертикальный 9:16</option></select></div>
+<div><label for="style">Стиль</label><select id="style"><option value="photorealistic">Фотореализм</option><option value="cinematic">Кинематографичный</option><option value="digital art">Digital art</option><option value="3D render">3D render</option><option value="anime">Аниме</option></select></div>
+</div>
+<button class="primary" id="generate">✦ СОЗДАТЬ ИЗОБРАЖЕНИЕ</button>
+<div class="status" id="status" role="status"></div>
+<div class="preview" id="preview"><img id="result" alt="Созданное изображение"><div class="actions"><a id="download" download="shohin-ai-image.png">Сохранить изображение</a><button id="again">Создать ещё</button></div></div>
+</section>
+<section class="panel api">
+<details><summary>⚙ Подключение AI-сервера</summary><label for="apiUrl" style="margin-top:14px">Адрес Hugging Face Space backend</label><input id="apiUrl" type="url" placeholder="https://your-space.hf.space"><div class="hint">Адрес сохраняется только на этом устройстве. Не вставляйте сюда секретный токен. Токен модели должен храниться в Secrets серверного приложения.</div><button class="chip" id="saveApi" style="margin-top:10px">Сохранить адрес</button></details>
+</section>
+<div class="foot">SHOHIN AI IMAGE ENGINE · HAWO</div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+let imageUrl=null;
+const savedApi=localStorage.getItem("shohinAiImageApi")||"";
+$("apiUrl").value=savedApi;
+$("saveApi").addEventListener("click",()=>{
+ const value=$("apiUrl").value.trim().replace(/\/$/,"");
+ if(value && !/^https:\/\//i.test(value)){ $("status").textContent="Нужен HTTPS-адрес сервера.";return; }
+ localStorage.setItem("shohinAiImageApi",value);$("apiUrl").value=value;$("status").textContent="Адрес сервера сохранён на этом устройстве.";
+});
+document.querySelectorAll("[data-prompt]").forEach(btn=>btn.addEventListener("click",()=>{$("prompt").value=btn.dataset.prompt;}));
+$("again").addEventListener("click",()=>$("generate").click());
+$("generate").addEventListener("click",async()=>{
+ const prompt=$("prompt").value.trim();
+ const api=($("apiUrl").value||localStorage.getItem("shohinAiImageApi")||"").trim().replace(/\/$/,"");
+ if(prompt.length<4){$("status").textContent="Напиши описание изображения (минимум 4 символа).";return;}
+ if(!api){$("status").textContent="Сначала подключи AI-сервер в разделе «Подключение AI-сервера».";document.querySelector(".api details").open=true;return;}
+ const ratios={square:[1024,1024],landscape:[1024,576],portrait:[576,1024]};
+ const [width,height]=ratios[$("ratio").value];
+ const style=$("style").value;
+ const finalPrompt=prompt+", "+style+", high quality, detailed composition";
+ const btn=$("generate");btn.disabled=true;btn.textContent="СОЗДАЁМ…";$("status").textContent="Модель генерирует изображение. Это может занять некоторое время.";
+ $("preview").style.display="none";
+ try{
+  const response=await fetch(api+"/generate",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt:finalPrompt,width,height})});
+  if(!response.ok){let message="Ошибка сервера: "+response.status;try{const data=await response.json();message=data.detail||data.error||message;}catch{}throw new Error(message);}
+  const blob=await response.blob();
+  if(!blob.type.startsWith("image/"))throw new Error("Сервер вернул не изображение. Проверь backend.");
+  if(imageUrl)URL.revokeObjectURL(imageUrl);
+  imageUrl=URL.createObjectURL(blob);$("result").src=imageUrl;$("download").href=imageUrl;$("preview").style.display="block";$("status").textContent="Изображение готово.";
+ }catch(error){$("status").textContent="Не удалось создать изображение: "+error.message;}
+ finally{btn.disabled=false;btn.textContent="✦ СОЗДАТЬ ИЗОБРАЖЕНИЕ";}
+});
+</script>
+</body>
+</html>
